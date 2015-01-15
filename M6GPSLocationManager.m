@@ -8,6 +8,8 @@
 
 #import "M6GPSLocationManager.h"
 
+#define MaxWaitTime 10.f
+
 @interface M6GPSLocationManager()
 
 @property (nonatomic, strong) CLLocationManager * locationManager;
@@ -82,7 +84,7 @@ static M6GPSLocationManager * _GPSLocationManager;
     self.maximumWaitTimeForBetterResult = maximumWaitTimeForBetterResult;
     self.maximumAttempts = maximumAttempts;
     
-    [self performSelector:@selector(stopUpdatingLocationWithBestResult) withObject:nil afterDelay:30.f];
+    [self performSelector:@selector(stopUpdatingLocationWithBestResult) withObject:nil afterDelay:MaxWaitTime];
     [self.locationManager startUpdatingLocation];
 }
 
@@ -104,9 +106,20 @@ static M6GPSLocationManager * _GPSLocationManager;
     [self.locationManager stopUpdatingLocation];
     [self cancelPerformStopUpdatingLocationWithBestResult];
     
-    self.location = self.bestLocation;
-    if (self.completionBlock) {
-        self.completionBlock(nil, self.bestLocation);
+    if (self.bestLocation == nil) {
+        
+        // this is probably the result of repeated kCLErrorLocationUnknown
+        if (self.completionBlock) {
+            self.completionBlock([NSError errorWithDomain:kCLErrorDomain code:kCLErrorLocationUnknown userInfo:nil], nil);
+        }
+        
+    } else {
+    
+        self.location = self.bestLocation;
+        if (self.completionBlock) {
+            self.completionBlock(nil, self.bestLocation);
+        }
+    
     }
     
 }
@@ -163,6 +176,18 @@ static M6GPSLocationManager * _GPSLocationManager;
     if (!self.scoping) {
         return;
     }
+    
+    if ([error.domain isEqual:kCLErrorDomain]) {
+        
+        // this error may happen from time to time and looks temporary
+        if (error.code == kCLErrorLocationUnknown) {
+            [self.locationManager stopUpdatingLocation];
+            [self.locationManager startUpdatingLocation];
+            return;
+        }
+        
+    }
+    
     self.scoping = NO;
     [self.locationManager stopUpdatingLocation];
     [self cancelPerformStopUpdatingLocationWithBestResult];
